@@ -9,21 +9,23 @@
 '''
 
 import atexit
+import json
+import os
 import re
 import shutil
 import tempfile
-from time import sleep, time
-import requests
-import json
 import threading
-import os
+from time import sleep, time
+
+import requests
+
+from .gadgetbox import RopgadgetBox, RopperBox, ElfGadgetBox
 from .misc import errlog_exit, log_ex, one_gadget
-from .gadgetbox import RopperBox
 
 __all__ = ["LibcBox"]
 
 class LibcBox:
-    def __init__(self, debug=False, wait_time=45):
+    def __init__(self, search_url="https://libc.rip/api/find", debug=False, wait_time=45):
         self._data = dict() # post data, is a dict
         self._res = None # post res, is a dict
         self._symbols = None
@@ -32,6 +34,10 @@ class LibcBox:
 
         self.debug = debug # open debug or not
         self._wait_time = wait_time
+        self._search_url = search_url
+        self._search_url_list = ["https://libc.roderickchan.cn/api/find", "https://libc.rip/api/find"]
+        if search_url:
+            self._search_url_list.insert(0, search_url)
 
         self._rb = None # RopperBox
         self._tmp_dir = tempfile.mkdtemp()
@@ -81,9 +87,17 @@ class LibcBox:
 
 
     def __post_to_find(self):
-        r = requests.post(url="https://libc.rip/api/find", data=json.dumps(self._data), headers={'Content-Type': 'application/json'})
-        if r.status_code != 200:
-            errlog_exit("Error status_code: {}".format(r.status_code))
+        get_data = False
+        for url in self._search_url_list:
+            try:
+                r = requests.post(url=url, data=json.dumps(self._data), headers={'Content-Type': 'application/json'})
+                if r.status_code == 200:
+                    get_data =True
+                    break
+            except:
+                pass
+        if not get_data:
+            errlog_exit("Error status_code: {} from {}".format(r.status_code, url))
         self._res = json.loads(r.text)
     
 
@@ -114,11 +128,13 @@ class LibcBox:
         _pattern = "libc?6?[-_](\d\.\d\d)"
         options = []
         print("="*90)
-        print("There are candidates with glibc version >= {}: ".format(version_start))
+        if version_start is not None:
+            log_ex("There are candidates with glibc version >= {}: ".format(version_start))
         for i, r in enumerate(self._res):
-            _match = re.search(_pattern, r['id'])
-            if _match and _match.groups()[0] < version_start:
-                continue
+            if version_start is not None:
+                _match = re.search(_pattern, r['id'])
+                if _match and _match.groups()[0] < version_start:
+                    continue
             print(
 """[{}] ==> version: {}
         buildid: {}
@@ -235,7 +251,7 @@ class LibcBox:
             while not self._finish_so:
                 sleep(0.1)
             self._log("start to load gadget...")
-            threading.Thread(target=self.get_ropperbox, args=(False,), daemon=True).start()
+            threading.Thread(target=self.get_gadgetbox, args=(False,), daemon=True).start()
         
         self._lock.release()
 
@@ -292,14 +308,14 @@ class LibcBox:
             download_so (bool, optional): download so file in current directory or not. Defaults to False.
             download_deb (bool, optional): download so file in current directory or not. Defaults to False.
             redownload (bool, optional): redownload even though file exists in current directory. Defaults to False.
-            version_start (str, optional): libc version. Defaults to "2.23".
+            version_start (str, optional): libc version. Defaults to "2.23", no versio control when set None.
             load_gadgets (bool, optional): load gadgets using RopperBox. Defaults to False.
             wait_ (bool, optional): wait for download or not. Defaults to False.
         """
         if not self._data:
             errlog_exit("No condition! Please add condition first!")
         if version_start and not re.search("^\d\.\d\d$", version_start):
-            errlog_exit("Invalid version_start!")
+            errlog_exit("Invalid version_start, should be None or 2.23/2.27/2.31...!")
         self.__post_to_find()
         if not self._res:
             errlog_exit("Cannot find a libc file to meet your expectaions, please check your conditions!")
@@ -309,13 +325,13 @@ class LibcBox:
             while 1:
                 ans = input("please choose one number or 'q' to quit: ")
                 if ans[:-1] == "q" or ans[:-1] == "quit":
-                    print("quit libcbox!")
+                    log_ex("quit libcbox!")
                     exit(-1)
                 ans = int(ans)
                 if ans in options:
                     self._res = self._res[ans - 1]
                     break
-                print("Wrong input!")
+                log_ex("Wrong input!")
         else:
             self._res = self._res[0]
         
@@ -366,14 +382,20 @@ class LibcBox:
         return res
 
 
-    def get_ropperbox(self, debug=False) -> RopperBox:
+    def get_gadgetbox(self, debug=False) -> RopgadgetBox:
         if not self._rb:
             if not self._call_searcher:
-                errlog_exit("Please call search before you get_ropperbox!")
+                errlog_exit("Please call search before you get_gadgetbox!")
             self.__time_count(self._wait_time, True, "_finish_so")
             name = self._res['download_url'].split("/")[-1]
             fn   = os.path.join(self._tmp_dir, name)
-            self._rb = RopperBox(debug=debug)
+            try:
+                self._rb = RopgadgetBox(debug=debug)
+            except:
+                try:
+                    self._rb = RopperBox(debug=debug)
+                except:
+                    self._rb = ElfGadgetBox(debug=debug)
             self._rb.add_file("libc", fn, None)
         
         return self._rb

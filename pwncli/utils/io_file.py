@@ -9,7 +9,7 @@
 '''
 
 
-from pwn import FileStructure, error, context, pack, unpack, flat
+from pwn import FileStructure, context, error, flat, pack, unpack
 
 __all__ = [
     "IO_FILE_plus_struct",
@@ -381,17 +381,17 @@ def payload_replace(payload: str or bytes, rpdict:dict=None, filler="\x00"):
     assert context.bits in (32, 64), "wrong context.bits!"
     assert len(filler) == 1, "wrong filler!"
     
-    output = list(payload) if isinstance(payload, bytes) else list(payload.encode())
+    output = list(payload) if isinstance(payload, bytes) else list(payload.encode('latin-1'))
     
     if isinstance(filler, str):
-        filler = filler.encode()
+        filler = filler.encode('latin-1')
 
     for off, data in rpdict.items():
         assert isinstance(off, int), "wrong off in rpdict!"
         assert isinstance(data, (int, bytes, str)), "wrong data: {}!".format(data)
 
         if isinstance(data, str):
-            data = data.encode()
+            data = data.encode('latin-1')
         elif isinstance(data, int):
             data = pack(data, word_size=context.bits, endianness=context.endian)
         distance = len(output) - len(data)

@@ -30,15 +30,16 @@ doctest for these functions
 
 
 
-import sys
+import functools
 import os
 import re
-import functools
-import subprocess
 import struct
-from pwn import unpack, pack, flat, ELF, context, which
-import click
+import subprocess
+import sys
 import time
+
+import click
+from pwn import ELF, context, flat, pack, unpack, which
 
 __all__ = [
     "int16",
@@ -72,6 +73,7 @@ __all__ = [
     "ldd_get_libc_path",
     "one_gadget",
     "one_gadget_binary",
+    "u8_ex",
     "u16_ex",
     "u24_ex",
     "u32_ex",
@@ -102,19 +104,28 @@ __all__ = [
     "calc_entryaddr_by_countaddr_tcache",
     "protect_ptr",
     "reveal_ptr",
-    "step_split"
+    "step_split",
+    "get_func_signature_str"
 ]
 
-int16 = functools.partial(int, base=16)
-int8 = functools.partial(int, base=8)
-int2 = functools.partial(int, base=2)
-
-int16_ex = lambda x: int16(x.decode()) if isinstance(x, bytes) else int16(x)
-int8_ex = lambda x: int8(x.decode()) if isinstance(x, bytes) else int8(x)
-int2_ex = lambda x: int2(x.decode()) if isinstance(x, bytes) else int2(x)
-int_ex = lambda x: int(x.decode()) if isinstance(x, bytes) else int(x)
+int16_ex = int16 = functools.partial(int, base=16)
+int8_ex = int8 = functools.partial(int, base=8)
+int2_ex = int2 = functools.partial(int, base=2)
+int_ex = int
 
 flat_z = functools.partial(flat, filler=b"\x00")
+
+def get_func_signature_str(func_name: str, *args, **kwargs):
+    args_str = ""
+    kwargs_str = ""
+    if args:
+        args_str = ", ".join(str(x) for x in args)
+    if kwargs:
+        if args_str:
+            args_str += ", "
+        kwargs_str = ", ".join("{}={}".format(_k, _v) for _k, _v in kwargs.items())
+    return "{}({}{})".format(func_name, args_str, kwargs_str)
+
 
 
 def step_split(s: str or bytes, step_len: int):
@@ -143,7 +154,9 @@ def protect_ptr(address, next) -> int:
 def reveal_ptr(addr) -> int:
     """
     addr = addr1 ^ addr2
-    addr2 = addr1 + XXX 
+    
+    addr2 = addr1 + XXX
+    
     calc the heap address
     """
     _res = addr
@@ -325,7 +338,11 @@ def ldd_get_libc_path(filepath:str) -> str:
         out = subprocess.check_output(["ldd", filepath], encoding='utf-8').split()
         for o in out:
             if "/libc" in o:
-                rp = os.path.realpath(o)
+                filedir = os.path.dirname(filepath)
+                if o.startswith("/"):
+                    rp = o
+                else:
+                    rp = os.path.realpath(os.path.join(filedir, o))
                 break
     except:
         pass
@@ -343,6 +360,10 @@ def one_gadget(condition:str, more=False, buildid=False):
         int: Address of each one_gadget.
     """
     cmd_list = ["one_gadget", "--raw"]
+    if re.match(r"[0-9a-f]+",condition, re.I):
+        buildid = True
+    else:
+        buildid = False
     if buildid:
         cmd_list.extend(["--build-id"])
     elif not os.path.exists(condition):
@@ -358,7 +379,7 @@ def one_gadget(condition:str, more=False, buildid=False):
         res = subprocess.check_output(cmd_list, encoding='utf-8').split()
         return [int(i) for i in res]
     except:
-        errlog_exit("Cannot exec one_gadget, maybe you don't install one_gadget or filename is wrong or buildid is wrong!")
+        errlog_exit("Cannot exec one_gadget, maybe you don't install one_gadget or filename is wrong or buildid is wrong! cmd: {}".format(" ".join(cmd_list)))
 
 
 def one_gadget_binary(binary_path:str, more=False):
@@ -374,12 +395,21 @@ def one_gadget_binary(binary_path:str, more=False):
 
 
 #--------------------------------useful function------------------------------
+def u8_ex(data: str or bytes) -> int:
+    assert isinstance(data, (str, bytes)), "wrong data type!"
+    length = len(data)
+    assert length <= 1, "len(data) > 1!"
+    if isinstance(data, str):
+        data = data.encode('latin-1')
+    data = data.ljust(1, b"\x00")
+    return unpack(data, 8)
+
 def u16_ex(data: str or bytes) -> int:
     assert isinstance(data, (str, bytes)), "wrong data type!"
     length = len(data)
     assert length <= 2, "len(data) > 2!"
     if isinstance(data, str):
-        data = data.encode('utf-8')
+        data = data.encode('latin-1')
     data = data.ljust(2, b"\x00")
     return unpack(data, 16)
 
@@ -389,7 +419,7 @@ def u24_ex(data: str or bytes) -> int:
     length = len(data)
     assert length <= 3, "len(data) > 3!"
     if isinstance(data, str):
-        data = data.encode('utf-8')
+        data = data.encode('latin-1')
     data = data.ljust(3, b"\x00")
     return unpack(data, 24)
 
@@ -399,7 +429,7 @@ def u32_ex(data: str or bytes) -> int:
     length = len(data)
     assert length <= 4, "len(data) > 4!"
     if isinstance(data, str):
-        data = data.encode('utf-8')
+        data = data.encode('latin-1')
     data = data.ljust(4, b"\x00")
     return unpack(data, 32)
     
@@ -409,7 +439,7 @@ def u64_ex(data: str or bytes) -> int:
     assert length <= 8, "len(data) > 8!"
     assert isinstance(data, (str, bytes)), "wrong data type!"
     if isinstance(data, str):
-        data = data.encode('utf-8')
+        data = data.encode('latin-1')
     data = data.ljust(8, b"\x00")
     return unpack(data, 64)
 
@@ -553,7 +583,7 @@ def recv_libc_addr(io, *, bits=64, offset=0, timeout=5) -> int:
     else:
         return u64_ex(m[-6:]) - offset
 
-#@unused("Remove since 1.4")
+
 def get_flag_when_get_shell(io, use_cat:bool=True, start_str:str="flag{", timeout=10):
     """Get flag while get a shell
 
@@ -571,7 +601,7 @@ def get_flag_when_get_shell(io, use_cat:bool=True, start_str:str="flag{", timeou
     else:
         errlog_ex_highlight("Cannot get flag")
 
-#@unused("Remove since 1.4")
+
 def get_flag_by_recv(io, flag_reg: str="flag{", timeout=10):
     get_flag_when_get_shell(io,use_cat=False, start_str=flag_reg, timeout=timeout)
 
@@ -590,17 +620,19 @@ def get_segment_base_addr_by_proc_maps(pid:int, filename:str=None) -> dict:
     assert isinstance(pid, int), "error type!"
     res = None
     try:
-        res = subprocess.check_output(["cat", "/proc/{}/maps".format(pid)]).decode().split("\n")
+        res = subprocess.check_output(["cat", "/proc/{}/maps".format(pid)]).decode().lower()
         if "/libc" not in res or "/ld" not in res: # again
             # wait for ld load libc
             time.sleep(1)
             try:
-                res = subprocess.check_output(["cat", "/proc/{}/maps".format(pid)]).decode().split("\n")
+                res = subprocess.check_output(["cat", "/proc/{}/maps".format(pid)]).decode().lower()
             except:
                 errlog_exit("cat /proc/{}/maps faild!".format(pid))
 
     except:
         errlog_exit("cat /proc/{}/maps faild!".format(pid))
+    
+    res = res.split("\n")
     _d = {}
     code_flag = 0
     libc_flag = 0
@@ -742,6 +774,7 @@ def calc_entryaddr_by_countaddr_tcache(tcache_perthread_addr: int, countaddr: in
     idx = dis // sizeofcount
     start_addr = tcache_perthread_addr + sizeofcount * 64
     return idx * (bits >> 3) + start_addr
+
 
 #-------------------------------private-------------------------------
 def _get_elf_arch_info(filename):

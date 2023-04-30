@@ -10,11 +10,13 @@
 
 
 
+import typing
+from string import printable
+
 from pwnlib.util.hashes import *
 from pwnlib.util.iters import bruteforce, mbruteforce
+
 from .misc import errlog_exit
-from string import printable
-import typing
 
 __all__ = [
     "bruteforce_hash_prefixstr",
@@ -42,7 +44,7 @@ def __inner_bruteforce(hash_algo:str, prefix_str:str, check_res_func:typing.Call
 
     def func(s):
         hash_func = globals()[hash_algo+"sumhex"]
-        res = hash_func((prefix_str+s).encode())
+        res = hash_func((prefix_str+s).encode('latin-1'))
         return check_res_func(res)
     
     res = None

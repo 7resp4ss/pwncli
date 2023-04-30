@@ -181,8 +181,10 @@ def _set_terminal(ctx, p, flag, attach_mode, use_gdb, gdb_type, script, is_file,
                     "debug-command --> No tmux, no wsl, but use the pwntools' default terminal to use gdb because of 'use-gdb' enabled.")
                 if _in_tmux():
                     context.terminal = ["tmux", "splitw", "-h"]
+                    ctx.vlog2("debug-command --> Detected in tmux when use -u option.")
                 elif which("gnome-terminal"):
                     context.terminal = ["gnome-terminal", "--", "sh", "-c"]
+                    ctx.vlog2("debug-command --> Detected in gnome when use -u option.")
                 gdb_pid, gdb_obj = attach(target=p, gdbscript=script, api=True)
                 ctx.gift['gdb_pid'] = gdb_pid
                 ctx.gift['gdb_obj'] = gdb_obj
@@ -201,7 +203,7 @@ def _set_terminal(ctx, p, flag, attach_mode, use_gdb, gdb_type, script, is_file,
 def _check_set_value(ctx, filename, argv, env, use_tmux, use_wsl, use_gnome, attach_mode,
                      use_gdb, gdb_type, gdb_breakpoint, gdb_script, pause_before_main, hook_file, hook_function, gdb_tbreakpoint):
     # set filename
-    if not ctx.gift.get('filename', None):
+    if not ctx.gift.filename:
         _set_filename(
             ctx, filename, msg="debug-command --> Set 'filename': {}".format(filename))
 
