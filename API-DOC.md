@@ -716,7 +716,7 @@ https://www.roderickchan.cn/post/house-of-apple-%E4%B8%80%E7%A7%8D%E6%96%B0%E7%9
 
 参数：
 
-+ `standard_FILE_addr(int)`：要确保该参数为`_IO_2_1_stdin_/_IO_2_1_stdout_/_IO_2_1_stderr_`其中一个的地址。若没办法，则该参数-0x30和-0x18处要为0
++ `standard_FILE_addr(int)`：即将伪造的`FILE`结构体的起始地址，该地址-0x30和-0x18处要为0
 + `_IO_wfile_jumps_addr(int)`：`_IO_wfile_jumps_`的地址，一般设为 `libc.sym._IO_wfile_jumps`即可
 + `leave_ret_addr(int)`：代表`leave_ret`汇编指令的地址
 + `pop_rbp_addr(int)`：代表`poo rbp; ret`汇编指令的地址
