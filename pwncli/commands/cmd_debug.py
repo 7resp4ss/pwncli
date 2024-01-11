@@ -4,7 +4,7 @@
 @File    : cmd_debug.py
 @Time    : 2021/11/23 23:49:55
 @Author  : Roderick Chan
-@Email   : ch22166@163.com
+@Email   : roderickchan@foxmail.com
 @Desc    : debug subcommand
 '''
 
@@ -134,7 +134,7 @@ def _set_terminal(ctx, p, flag, attach_mode, use_gdb, gdb_type, script, is_file,
                     'debug-command --> Cannot get distro name in wsl, please check your env!')
 
             if not re.search("ubuntu-\d\d.\d\d", distro_name, re.I):
-                ctx.abort('debug-command --> Only support Ubuntu-XX.XX system!')
+                ctx.vlog2('debug-command --> Warn: The distribution name is not Ubuntu-XX.XX.')
 
             ctx.vlog2(
                 "debug-command --> Find wsl distro, name '{}'".format(distro_name))
@@ -301,20 +301,25 @@ def _check_set_value(ctx, filename, argv, env, use_tmux, use_wsl, use_gnome, att
             gb = gb.replace(" ", "")
             script += _pre
             if gb.startswith(('0x', "0X")) or gb.isdecimal():
-                script += ' *{}\n'.format(gb)
-            elif gb.startswith(('$rebase(', '$_base(')):
+                script += ' *({})\n'.format(gb)
+            elif gb.startswith("lb+"): # base is lib.so.6
+                script += " *##{}##\n".format(gb[3:])
+            elif gb.startswith(('$rebase(', '$_base(')): # base is Program ELF Base
                 fi = gb.index('(')
                 bi = gb.index(')')
-                script += " *###({})\n".format(gb[fi+1: bi])
-            elif gb.startswith('base+'):
-                script += " *###({})\n".format(gb[5:])
-            elif gb.startswith('bin+'):
-                script += " *###({})\n".format(gb[4:])
-            elif gb.startswith('b+'):
-                script += " *###({})\n".format(gb[2:])
-            elif gb.startswith('+'):
-                script += " *###({})\n".format(gb[1:])
+                script += " *###{}###\n".format(gb[fi+1: bi])
+            elif gb.startswith('base+'): # base is is Program ELF Base
+                script += " *###{}###\n".format(gb[5:])
+            elif gb.startswith('bin+'): # base is is Program ELF Base
+                script += " *###{}###\n".format(gb[4:])
+            elif gb.startswith('b+'): # base is is Program ELF Base
+                script += " *###{}###\n".format(gb[2:])
+            elif gb.startswith('+'): # base is is Program ELF Base
+                script += " *###{}###\n".format(gb[1:])
             elif "+" in gb:
+                script += " *####{}####\n".format(gb)
+            elif "-" in gb:
+                gb = gb.replace("-", "+-")
                 script += " *####{}####\n".format(gb)
             else:
                 script += ' {}\n'.format(gb)
@@ -485,12 +490,12 @@ int %s()
             _script = _script.replace("####{}####".format(_expr), _result)
         script = _script
 
-    # have base-format breakpoints
+    # have program base-format breakpoints
     if "###" in script:
         if not ctx.gift['elf'].pie:
             ctx.vlog2(
                 "debug-command --> set base-format breakpoints while current binary's PIE not enable")
-        _pattern = "###\(([0-9a-fx\+\-\*/]+)\)"
+        _pattern = "###([0-9a-fx\+\-\*/]+)###"
         _script = script
         for _match in re.finditer(_pattern, script, re.I):
             _epxr = _match.groups()[0]
@@ -498,7 +503,20 @@ int %s()
             _result = ""
             _result = hex(ctx.gift['_elf_base'] + _num)
         
-            _script = _script.replace("###({})".format(_epxr), _result)
+            _script = _script.replace("###{}###".format(_epxr), _result)
+        script = _script
+
+    # process libc base breakpoints
+    if "##" in script:
+        _pattern = "##([0-9a-fx\+\-\*/]+)##"
+        _script = script
+        for _match in re.finditer(_pattern, script, re.I):
+            _epxr = _match.groups()[0]
+            _num = int(expr(_epxr))
+            _result = ""
+            _result = hex(ctx.gift['_libc_base'] + _num)
+        
+            _script = _script.replace("##{}##".format(_epxr), _result)
         script = _script
 
     if script:
@@ -556,7 +574,7 @@ int %s()
 
 @click.command(name='debug', short_help="Debug the pwn file locally.")
 @click.argument('filename', type=str, default=None, required=False, nargs=1)
-@click.option('--argv', type=str, default=None, required=False, show_default=True, help="Argv for process.")
+@click.option('-a', '--argv', "argv", type=str, default=None, required=False, show_default=True, help="Argv for process.")
 @click.option("-e", '--set-env', "--env", "env", type=str, default=None, required=False, help="The env setting for process, such as LD_PRELOAD setting, split using ',' or ';', assign using ':'.")
 @click.option('-p', '--pause', '--pause-before-main', "pause_before_main", is_flag=True, show_default=True, help="Pause before main is called or not, which is helpful for gdb attach.")
 @click.option('-f', '-hf', '--hook-file', "hook_file", type=str,  default=None, required=False, help="Specify a hook.c file, where you write some functions to hook.")

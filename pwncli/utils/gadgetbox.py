@@ -4,7 +4,7 @@
 @File    : gadgetbox.py
 @Time    : 2021/11/23 12:33:55
 @Author  : Roderick Chan
-@Email   : ch22166@163.com
+@Email   : roderickchan@foxmail.com
 @Desc    : Construct gadget box form ropgadget/ropper/pwntools.elf
 '''
 
@@ -115,6 +115,9 @@ class _GadgetBase:
     def get_pop_rcx_ret(self, name: str = None) -> int:
         return self.search_opcode("59c3", name)
 
+    def get_pop_rcx_rbx_ret(self, name: str = None) -> int:
+        return self.search_opcode("595bc3", name)
+
     def get_pop_rbp_ret(self, name: str = None) -> int:
         return self.search_opcode("5dc3", name)
 
@@ -137,7 +140,7 @@ class _GadgetBase:
         return self.search_opcode("c9c3", name)
 
     def get_magic_gadget(self, name: str = None) -> int:
-        """add dword ptr [rbp - 0x3d], ebx"""
+        """add dword ptr [rbp - 0x3d], ebx; ret"""
         return self.search_opcode("015dc3", name)
 
     def get_bin_sh(self, name: str = None) -> int:

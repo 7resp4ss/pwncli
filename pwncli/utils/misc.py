@@ -42,6 +42,7 @@ import click
 from pwn import ELF, context, flat, pack, unpack, which
 
 __all__ = [
+    # partial functions
     "int16",
     "int8",
     "int2",
@@ -50,7 +51,7 @@ __all__ = [
     "int2_ex",
     "int_ex",
     "flat_z",
-    "get_callframe_info",
+    # many log functions
     "log_ex",
     "log_ex_highlight",
     "log2_ex",
@@ -70,9 +71,15 @@ __all__ = [
     "log_libc_base_addr",
     "log_heap_base_addr",
     "log_code_base_addr",
+    # get libc path by ldd command and get onegadget
     "ldd_get_libc_path",
     "one_gadget",
     "one_gadget_binary",
+    
+    # pack and unpack enhanced functions
+    "hex_ex",
+    "float2str_pure",
+    
     "u8_ex",
     "u16_ex",
     "u24_ex",
@@ -85,16 +92,26 @@ __all__ = [
     "p64_ex",
     "p32_float",
     "p64_float",
+    "u32_float",
+    "u64_float",
     "pad_ljust",
     "pad_rjust",
     "float_hexstr2int",
-    "generate_payload_for_connect",
+    "mem64_float2int",
+    "mem32_float2int",
+    "mem64_int2float",
+    "mem32_int2float",
+    
+    # recv some address
     "recv_libc_addr",
-    "get_flag_when_get_shell",
-    "get_flag_by_recv",
+    "recv_addr_startswith_0x",
     "get_segment_base_addr_by_proc_maps",
+    
+    # init with gift.io
     "init_x86_context",
     "init_x64_context",
+    
+    # tcachebins calcuator
     "calc_chunksize_corrosion",
     "calc_targetaddr_corrosion",
     "calc_idx_tcache",
@@ -102,10 +119,16 @@ __all__ = [
     "calc_entryaddr_tcache",
     "calc_countaddr_by_entryaddr_tcache",
     "calc_entryaddr_by_countaddr_tcache",
+    
+    # safe linking calculator
     "protect_ptr",
     "reveal_ptr",
+    
+    # some useful functions
     "step_split",
-    "get_func_signature_str"
+    "get_func_signature_str",
+    "get_callframe_info",
+
 ]
 
 int16_ex = int16 = functools.partial(int, base=16)
@@ -395,6 +418,34 @@ def one_gadget_binary(binary_path:str, more=False):
 
 
 #--------------------------------useful function------------------------------
+
+def hex_ex(num: int) -> str:
+    """hex_ex(0x0) -> 0x00
+    
+    hex_ex(0x111) -> 0x0111
+    """
+    s = hex(num)
+    if len(s) % 2 == 0:
+        return s
+    return s[:2] + '0' + s[2:]
+
+def float2str_pure(f: float):
+    """float2str_pure(1.222e4) -> "12220.0"
+    
+    float2str_pure(1.222e-4) -> "0.0001222"
+    """
+    s = str(f)
+    if 'e' in s:
+        s2 = s.split('e')[1]
+        s2 = int(s2)
+        if s2 < 0:
+            ff = "{" + ":.{}f".format(abs(s2-0x20)) + "}"
+        else:
+            ff = "{" + ":.{}f".format(0x20) + "}"
+        return ff.format(f)        
+    else:
+        return s
+
 def u8_ex(data: str or bytes) -> int:
     assert isinstance(data, (str, bytes)), "wrong data type!"
     length = len(data)
@@ -404,78 +455,78 @@ def u8_ex(data: str or bytes) -> int:
     data = data.ljust(1, b"\x00")
     return unpack(data, 8)
 
-def u16_ex(data: str or bytes) -> int:
+def u16_ex(data: str or bytes, **kwargs) -> int:
     assert isinstance(data, (str, bytes)), "wrong data type!"
     length = len(data)
     assert length <= 2, "len(data) > 2!"
     if isinstance(data, str):
         data = data.encode('latin-1')
     data = data.ljust(2, b"\x00")
-    return unpack(data, 16)
+    return unpack(data, 16, **kwargs)
 
 
-def u24_ex(data: str or bytes) -> int:
+def u24_ex(data: str or bytes, **kwargs) -> int:
     assert isinstance(data, (str, bytes)), "wrong data type!"
     length = len(data)
     assert length <= 3, "len(data) > 3!"
     if isinstance(data, str):
         data = data.encode('latin-1')
     data = data.ljust(3, b"\x00")
-    return unpack(data, 24)
+    return unpack(data, 24, **kwargs)
 
 
-def u32_ex(data: str or bytes) -> int:
+def u32_ex(data: str or bytes, **kwargs) -> int:
     assert isinstance(data, (str, bytes)), "wrong data type!"
     length = len(data)
     assert length <= 4, "len(data) > 4!"
     if isinstance(data, str):
         data = data.encode('latin-1')
     data = data.ljust(4, b"\x00")
-    return unpack(data, 32)
+    return unpack(data, 32, **kwargs)
     
 
-def u64_ex(data: str or bytes) -> int:
+def u64_ex(data: str or bytes, **kwargs) -> int:
     length = len(data)
     assert length <= 8, "len(data) > 8!"
     assert isinstance(data, (str, bytes)), "wrong data type!"
     if isinstance(data, str):
         data = data.encode('latin-1')
     data = data.ljust(8, b"\x00")
-    return unpack(data, 64)
+    return unpack(data, 64, **kwargs)
 
 
 def p8_ex(num:int) -> bytes:
     if num < 0:
         num += 1 << 8
     num &= 0xff
-    return pack(num, word_size=8)
+    return pack(num, 8)
 
 
-def p16_ex(num:int) -> bytes:
+def p16_ex(num:int, **kwargs) -> bytes:
     if num < 0:
         num += 1 << 16
     num &= 0xffff
-    return pack(num, word_size=16)
+    return pack(num, 16, **kwargs)
 
 
-def p24_ex(num: int) -> bytes:
+def p24_ex(num: int, **kwargs) -> bytes:
     if num < 0:
         num += 1 << 24
     num &= 0xffffff
-    return pack(num, word_size=24)
+    return pack(num, 24, **kwargs)
 
-def p32_ex(num:int) -> bytes:
+def p32_ex(num:int, **kwargs) -> bytes:
     if num < 0:
         num += 1 << 32
     num &= 0xffffffff
-    return pack(num, word_size=32)
+    return pack(num, 32, **kwargs)
 
 
-def p64_ex(num:int) -> bytes:
+def p64_ex(num:int, **kwargs) -> bytes:
     if num < 0:
         num += 1 << 64
     num &= 0xffffffffffffffff
-    return pack(num, word_size=64)
+    return pack(num, 64, **kwargs)
 
 
 def p32_float(num:float, endian="little") -> bytes:
@@ -495,22 +546,87 @@ def p64_float(num:float, endian="little") -> bytes:
     else:
         raise RuntimeError("Wrong endian!")
 
-def pad_ljust(payload, psz, filler="\x00") -> bytes:
+def u32_float(data: bytes or str, endian="little") -> float:
+    length = len(data)
+    assert length <= 4, "len(data) > 4!"
+    assert isinstance(data, (str, bytes)), "wrong data type!"
+    if isinstance(data, str):
+        data = data.encode('latin-1')
+    if endian.lower() == "little":
+        data = data.ljust(4, b"\x00")
+        return struct.unpack("<f", data)[0]
+    elif endian.lower() == "big":
+        data = data.rjust(4, b"\x00")
+        return struct.unpack(">f", data)[0]
+    else:
+        raise RuntimeError("Wrong endian!")
+        
+
+def u64_float(data: bytes or str, endian="little") -> float:
+    length = len(data)
+    assert length <= 8, "len(data) > 8!"
+    assert isinstance(data, (str, bytes)), "wrong data type!"
+    if isinstance(data, str):
+        data = data.encode('latin-1')
+    if endian.lower() == "little":
+        data = data.ljust(8, b"\x00")
+        return struct.unpack("<d", data)[0]
+    elif endian.lower() == "big":
+        data = data.rjust(8, b"\x00")
+        return struct.unpack(">d", data)[0]
+    else:
+        raise RuntimeError("Wrong endian!")
+
+
+def mem64_float2int(num:float, endian="little") -> int:
+    """Get the int number of a double number when use the identical memeory. 
+    
+    For example, 0xdeadbeef's memory is 0x41ebd5b7dde00000, mem64_float2int(0xdeadbeef) to get 0x41ebd5b7dde00000"""
+    return u64_ex(p64_float(num, endian))
+
+def mem32_float2int(num:float, endian="little") -> int:
+    """Get the int number of a float number when use the identical memeory. 
+    
+    For example, 0xdeadbeef's memory is 0x4f5eadbf, mem32_float2int(0xdeadbeef) to get 0x4f5eadbf"""
+    return u32_ex(p32_float(num, endian))
+
+
+def mem64_int2float(num: int, endian="little") -> float:
+    """Get the double number of an int number when use the identical memeory. 
+    
+    For example, 0xdeadbeef's memory is 0x41ebd5b7dde00000, mem64_int2float(0x41ebd5b7dde00000) to get 0xdeadebeef"""
+    res = u64_float(pack(num, endianness=endian, word_size=64))
+    assert res != 0, "Invalid num!"
+    return res
+
+def mem32_int2float(num:float, endian="little") -> float:
+    """Get the double number of an int number when use the identical memeory. 
+    
+    For example, 0xdeadbeef's memory is 0x4f5eadbf, mem32_int2float(0x4f5eadbf) to get 0xdeadbeef"""
+    res = u32_float(pack(num, endianness=endian, word_size=32))
+    assert res != 0, "Invalid num!"
+    return res
+
+
+def pad_ljust(payload: bytes or str, psz: int, filler: str="\x00") -> bytes:
     len_ = len(payload)
     comple = len_ % psz
     if comple > 0:
         return flat(payload, filler * (psz - comple))
     return payload
 
-def pad_rjust(payload, psz, filler="\x00") -> bytes:
+def pad_rjust(payload: bytes or str, psz: int, filler: str="\x00") -> bytes:
     len_ = len(payload)
     comple = len_ % psz
     if comple > 0:
         return flat(filler * (psz - comple), payload)
     return payload
 
+
 def float_hexstr2int(data: str or bytes, hexstr=True, endian="little", bits=64) -> int:
-    """float_hex2int('0x0.07f6d266e9fbp-1022') ---> 140106772946864"""
+    """float_hex2int('0x0.07f6d266e9fbp-1022') ---> 140106772946864
+    
+    Used for printf("%a")"""
     endian = endian.lower()
     assert endian in ("little", "big"), "only little or big for endian!"
     assert bits in (32, 64), "only 32 or 64 for bits!"
@@ -546,19 +662,6 @@ def float_hexstr2int(data: str or bytes, hexstr=True, endian="little", bits=64) 
         errlog_exit("float_hex2int failed, check cmd: \n{}".format(cmd))
         
 
-def generate_payload_for_connect(ip: str, port: int) -> bytes:
-    """connect(socket_fd, buf, 0x10), generate payload of buf
-    
-    assert len(buf) == 0x10
-    
-    """
-    int_ip = 0
-    for i in ip.strip().split("."):
-        int_ip <<= 8
-        int_ip |= int(i)
-    return pack(2, word_size=16, endianness="little") + pack(port, word_size=16, endianness="big") + pack(int_ip, word_size=32, endianness="big") + pack(0, 64)
-
-
 def recv_libc_addr(io, *, bits=64, offset=0, timeout=5) -> int:
     """Calcuate libc-base addr while recv '\x7f' in amd64 or '\xf7' in i386.
 
@@ -583,27 +686,34 @@ def recv_libc_addr(io, *, bits=64, offset=0, timeout=5) -> int:
     else:
         return u64_ex(m[-6:]) - offset
 
-
-def get_flag_when_get_shell(io, use_cat:bool=True, start_str:str="flag{", timeout=10):
-    """Get flag while get a shell
+def recv_addr_startswith_0x(io, *, prefix="", suffix="", has_0x=True, timeout=5) -> int:
+    """Receive data with addressa which starts with 0x or 0X.
 
     Args:
-        p (tube): Instance of tube in pwntools
-        use_cat (bool, optional): Use cat /flag or not. Defaults to True.
-        start_str (str, optional): String starts with in flag. Defaults to "flag{".
+        io (tube): Tube.
+
+    Raises:
+        RuntimeError: Raise error if cannot recv addr.
+
+    Returns:
+        int: Some address
     """
-    if use_cat:
-        io.sendline("cat /flag || cat /flag.txt || cat flag || cat flag.txt || cat /home/ctf/flag || cat /home/ctf/flag.txt")
-        
-    s = io.recvregex(start_str+".*}", timeout=timeout)
-    if start_str.encode('utf-8') in s:
-        log2_ex_highlight("{}".format(s))
+    if len(suffix) == 0:
+        suffix = "[^0-9A-Fa-f]"
+    if has_0x:
+        mid = "(0[xX][0-9A-Fa-f]+)"
     else:
-        errlog_ex_highlight("Cannot get flag")
+        mid = "([0-9A-Fa-f]+)"
+    m = io.recvregex(prefix + mid + suffix, capture=True,timeout=timeout)
+    if not m:
+        raise RuntimeError("Cannot get 0x???? addr")
+    m = m.group(1)
+    if has_0x and (b"0x" not in m) and (b"0x" not in m):
+        raise RuntimeError("Cannot get 0x???? addr")
+    return int16_ex(m)
 
 
-def get_flag_by_recv(io, flag_reg: str="flag{", timeout=10):
-    get_flag_when_get_shell(io,use_cat=False, start_str=flag_reg, timeout=timeout)
+
 
 
 def get_segment_base_addr_by_proc_maps(pid:int, filename:str=None) -> dict:
@@ -631,9 +741,11 @@ def get_segment_base_addr_by_proc_maps(pid:int, filename:str=None) -> dict:
 
     except:
         errlog_exit("cat /proc/{}/maps faild!".format(pid))
-    
-    res = res.split("\n")
     _d = {}
+    if not res:
+        warn_ex("'cat /proc/{}/maps' gets empty result, are you sure the process is alive?".format(pid))
+        return _d
+    res = res.split("\n")
     code_flag = 0
     libc_flag = 0
     ld_flag = 0
@@ -685,10 +797,26 @@ def _assign_globals(_io, _g):
     _g['cr'] = _io.can_recv
 
 def init_x86_context(io, globals: dict, log_level: str="debug", timeout: int=5, arch: str="i386", os: str="linux", endian: str="little"):
+    """ Usage: 
+    
+    from pwncli import * 
+    
+    p = process(xxx)
+    
+    init_x86_context(p, globals())
+    """
     context.update(arch=arch, os=os, endian=endian, log_level=log_level, timeout=timeout)
     _assign_globals(io, globals)
 
 def init_x64_context(io, globals: dict, log_level: str="debug", timeout: int=5, arch: str="amd64", os: str="linux", endian: str="little"):
+    """ Usage: 
+    
+    from pwncli import * 
+    
+    p = process(xxx)
+    
+    init_x64_context(p, globals())
+    """
     context.update(arch=arch, os=os, endian=endian, log_level=log_level, timeout=timeout)
     _assign_globals(io, globals)
 
